@@ -1,5 +1,7 @@
 import { XMLParser } from 'fast-xml-parser';
 import Papa from 'papaparse';
+import { createReadStream, readFileSync } from 'fs';
+import { createInterface } from 'readline';
 import type { Run } from './database';
 
 export interface ParsedRun {
@@ -248,7 +250,145 @@ export function parseCSV(csvContent: string): ParsedRun[] {
 	return runs;
 }
 
-// Auto-detect format and parse
+// Parse Apple Health XML from file path (for large files)
+export async function parseAppleHealthXMLFromFile(filePath: string): Promise<ParsedRun[]> {
+	const runs: ParsedRun[] = [];
+
+	// For large XML files, we need to use a streaming approach
+	// We'll use a simple regex-based extraction since full XML parsing requires loading entire file
+	const fileStream = createReadStream(filePath, { encoding: 'utf8' });
+	const rl = createInterface({
+		input: fileStream,
+		crlfDelay: Infinity
+	});
+
+	let workoutBuffer = '';
+	let inWorkout = false;
+
+	for await (const line of rl) {
+		// Check if we're entering a Workout tag
+		if (line.includes('<Workout')) {
+			inWorkout = true;
+			workoutBuffer = line;
+		} else if (inWorkout) {
+			workoutBuffer += line;
+
+			// Check if we've reached the end of the workout tag
+			if (line.includes('/>') || line.includes('</Workout>')) {
+				inWorkout = false;
+
+				// Parse this workout
+				try {
+					// Extract attributes using regex
+					if (workoutBuffer.includes('Running')) {
+						const distanceMatch = workoutBuffer.match(/totalDistance="([^"]+)"/);
+						const durationMatch = workoutBuffer.match(/duration="([^"]+)"/);
+						const durationUnitMatch = workoutBuffer.match(/durationUnit="([^"]+)"/);
+						const distanceUnitMatch = workoutBuffer.match(/totalDistanceUnit="([^"]+)"/);
+						const startDateMatch = workoutBuffer.match(/startDate="([^"]+)"/);
+						const caloriesMatch = workoutBuffer.match(/totalEnergyBurned="([^"]+)"/);
+
+						if (distanceMatch && durationMatch) {
+							const distance = parseFloat(distanceMatch[1]);
+							let durationValue = parseFloat(durationMatch[1]);
+							const durationUnit = durationUnitMatch ? durationUnitMatch[1] : 'min';
+
+							// Convert duration to minutes
+							let duration = durationValue;
+							if (durationUnit === 'hr') {
+								duration = durationValue * 60;
+							}
+
+							// Convert distance to km if needed
+							let distanceKm = distance;
+							const distanceUnit = distanceUnitMatch ? distanceUnitMatch[1] : 'km';
+							if (distanceUnit === 'mi') {
+								distanceKm = distance * 1.60934;
+							}
+
+							if (distanceKm > 0 && duration > 0) {
+								runs.push({
+									date: startDateMatch ? new Date(startDateMatch[1]).toISOString() : new Date().toISOString(),
+									distance: distanceKm,
+									duration: duration,
+									pace: calculatePace(distanceKm, duration),
+									calories: caloriesMatch ? parseInt(caloriesMatch[1]) : undefined,
+									source: 'apple_health'
+								});
+							}
+						}
+					}
+				} catch (err) {
+					// Skip invalid workouts
+					console.error('Error parsing workout:', err);
+				}
+
+				workoutBuffer = '';
+			}
+		}
+	}
+
+	return runs;
+}
+
+// Parse CSV from file path
+export function parseCSVFromFile(filePath: string): ParsedRun[] {
+	const content = readFileSync(filePath, 'utf8');
+	return parseCSV(content);
+}
+
+// Parse GPX from file path
+export function parseGPXFromFile(filePath: string): ParsedRun[] {
+	const content = readFileSync(filePath, 'utf8');
+	return parseGPX(content);
+}
+
+// Auto-detect format and parse from file path (recommended for large files)
+export async function parseFileFromPath(filename: string, filePath: string): Promise<ParsedRun[]> {
+	const ext = filename.toLowerCase().split('.').pop();
+
+	if (ext === 'xml') {
+		// Check first few lines to detect format
+		const fileStream = createReadStream(filePath, { encoding: 'utf8' });
+		const rl = createInterface({
+			input: fileStream,
+			crlfDelay: Infinity
+		});
+
+		let isHealthData = false;
+		let isGPX = false;
+		let lineCount = 0;
+
+		for await (const line of rl) {
+			if (line.includes('<HealthData') || line.includes('Workout')) {
+				isHealthData = true;
+				break;
+			} else if (line.includes('<gpx') || line.includes('<trk')) {
+				isGPX = true;
+				break;
+			}
+			lineCount++;
+			if (lineCount > 50) break; // Check first 50 lines
+		}
+
+		rl.close();
+		fileStream.close();
+
+		if (isHealthData) {
+			return await parseAppleHealthXMLFromFile(filePath);
+		} else if (isGPX) {
+			return parseGPXFromFile(filePath);
+		}
+	} else if (ext === 'gpx') {
+		return parseGPXFromFile(filePath);
+	} else if (ext === 'csv') {
+		return parseCSVFromFile(filePath);
+	}
+
+	throw new Error(`Unsupported file format: ${ext}`);
+}
+
+// Auto-detect format and parse (legacy - for small files only)
 export function parseFile(filename: string, content: string): ParsedRun[] {
 	const ext = filename.toLowerCase().split('.').pop();
 

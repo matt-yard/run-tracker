@@ -38,6 +38,7 @@
 		"d3-shape": "^3.2.0",
 		"date-fns": "^4.1.0",
 		"fast-xml-parser": "^5.3.2",
+		"fs-extra": "^11.3.2",
 		"layerchart": "^1.0.12",
 		"papaparse": "^5.5.3",
 		"svelte-ux": "^1.0.9",
