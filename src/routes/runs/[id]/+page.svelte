@@ -12,12 +12,20 @@
 		TableHeader,
 		TableRow
 	} from '$lib/components/ui/table';
-	import { Chart, Svg, Axis, Bars, Area, Labels, Tooltip } from 'layerchart';
+	import { Chart, Svg, Axis, Bars, Area, Labels, Tooltip, Pie } from 'layerchart';
 	import { scaleLinear, scaleBand, scaleTime } from 'd3-scale';
-	import { ArrowLeft, Calendar, Clock, TrendingUp, Flame, Mountain, Heart } from 'lucide-svelte';
+	import { ArrowLeft, Calendar, Clock, TrendingUp, Flame, Mountain, Heart, Settings } from 'lucide-svelte';
+	import { getUserPreferences, getHeartRateZones } from '$lib/preferences';
 
 	let { data } = $props();
 	const run = $derived(data.run);
+
+	// Load user preferences
+	let userMaxHR = $state(190);
+	$effect(() => {
+		const prefs = getUserPreferences();
+		userMaxHR = prefs.maxHeartRate;
+	});
 
 	// Format helpers
 	function formatDuration(minutes: number): string {
@@ -206,20 +214,53 @@
 		return points;
 	});
 
-	// Heart rate zones (using 220 - 30 as default max HR if age not available)
-	const maxHR = 190; // Estimated max HR
-	const hrZones = [
-		{ zone: 1, min: maxHR * 0.5, max: maxHR * 0.6, color: 'bg-gray-200', name: 'Zone 1' },
-		{ zone: 2, min: maxHR * 0.6, max: maxHR * 0.7, color: 'bg-blue-200', name: 'Zone 2' },
-		{ zone: 3, min: maxHR * 0.7, max: maxHR * 0.8, color: 'bg-green-200', name: 'Zone 3' },
-		{ zone: 4, min: maxHR * 0.8, max: maxHR * 0.9, color: 'bg-orange-200', name: 'Zone 4' },
-		{ zone: 5, min: maxHR * 0.9, max: maxHR * 1.0, color: 'bg-red-200', name: 'Zone 5' }
-	];
+	// Heart rate zones (using user's custom max HR)
+	const hrZones = $derived(getHeartRateZones(userMaxHR));
 
 	const avgHRZone = $derived(() => {
 		if (!run.avgHeartRate) return null;
 		const zone = hrZones.find((z) => run.avgHeartRate >= z.min && run.avgHeartRate < z.max);
 		return zone || hrZones[hrZones.length - 1];
+	});
+
+	// Estimate HR zone distribution based on average HR
+	// Note: This is an approximation since we don't have time-series HR data
+	const hrZoneDistribution = $derived(() => {
+		if (!run.avgHeartRate) return [];
+
+		const avgZone = avgHRZone();
+		if (!avgZone) return [];
+
+		// Create an estimated distribution
+		// We'll assign most time to the zone containing the average HR,
+		// with smaller amounts to adjacent zones
+		const distribution = hrZones.map((zone) => {
+			let percentage = 0;
+
+			if (zone.zone === avgZone.zone) {
+				// Most time in the average zone
+				percentage = 60;
+			} else if (Math.abs(zone.zone - avgZone.zone) === 1) {
+				// Some time in adjacent zones
+				percentage = 15;
+			} else if (Math.abs(zone.zone - avgZone.zone) === 2) {
+				// A bit of time in zones 2 away
+				percentage = 5;
+			}
+
+			const timeInMinutes = (run.duration * percentage) / 100;
+
+			return {
+				zone: zone.zone,
+				name: zone.name,
+				color: zone.color,
+				percentage,
+				timeInMinutes,
+				label: `${zone.name}: ${Math.round(timeInMinutes)}m (${percentage}%)`
+			};
+		}).filter(d => d.percentage > 0);
+
+		return distribution;
 	});
 </script>
 
@@ -482,13 +523,19 @@
 	{#if run.avgHeartRate || run.maxHeartRate}
 		<Card class="mb-6">
 			<CardHeader>
-				<CardTitle class="flex items-center gap-2">
-					<Heart class="h-5 w-5" />
-					Heart Rate Analysis
-				</CardTitle>
+				<div class="flex items-center justify-between">
+					<CardTitle class="flex items-center gap-2">
+						<Heart class="h-5 w-5" />
+						Heart Rate Analysis
+					</CardTitle>
+					<Button href="/settings" variant="outline" size="sm">
+						<Settings class="h-4 w-4 mr-2" />
+						Adjust Max HR
+					</Button>
+				</div>
 			</CardHeader>
 			<CardContent>
-				<div class="space-y-4">
+				<div class="space-y-6">
 					<div class="grid grid-cols-2 gap-4">
 						{#if run.avgHeartRate}
 							<div class="p-4 border rounded-lg">
@@ -503,14 +550,83 @@
 							<div class="p-4 border rounded-lg">
 								<p class="text-sm text-muted-foreground">Maximum Heart Rate</p>
 								<p class="text-3xl font-bold mt-1">{run.maxHeartRate} <span class="text-base font-normal text-muted-foreground">bpm</span></p>
-								<p class="text-sm text-muted-foreground mt-2">{((run.maxHeartRate / maxHR) * 100).toFixed(0)}% of estimated max</p>
+								<p class="text-sm text-muted-foreground mt-2">{((run.maxHeartRate / userMaxHR) * 100).toFixed(0)}% of your max ({userMaxHR} bpm)</p>
 							</div>
 						{/if}
 					</div>
 
+					<!-- Time in HR Zones - Pie Chart -->
+					{#if hrZoneDistribution.length > 0}
+						<div class="border-t pt-6">
+							<h4 class="font-semibold mb-3">Estimated Time in Each Zone</h4>
+							<p class="text-xs text-muted-foreground mb-4">
+								⚠️ This is an approximation based on average HR. Actual distribution requires time-series heart rate data.
+							</p>
+
+							<div class="grid md:grid-cols-2 gap-6">
+								<!-- Pie Chart -->
+								<div class="h-64 flex items-center justify-center">
+									<Chart
+										data={hrZoneDistribution}
+										r="percentage"
+										rScale={scaleLinear()}
+									>
+										<Svg>
+											<Pie
+												let:data
+											>
+												{@const colors = {
+													1: '#e5e7eb',
+													2: '#bfdbfe',
+													3: '#86efac',
+													4: '#fed7aa',
+													5: '#fecaca'
+												}}
+												<path
+													d={data.path}
+													fill={colors[data.zone]}
+													stroke="white"
+													stroke-width="2"
+													class="hover:opacity-80 transition-opacity"
+												/>
+											</Pie>
+										</Svg>
+										<Tooltip let:data>
+											<div class="text-sm">
+												<div class="font-semibold">{data.name}</div>
+												<div>{Math.round(data.timeInMinutes)} minutes ({data.percentage}%)</div>
+											</div>
+										</Tooltip>
+									</Chart>
+								</div>
+
+								<!-- Legend -->
+								<div class="space-y-2">
+									{#each hrZoneDistribution as dist}
+										<div class="flex items-center justify-between p-2 rounded border">
+											<div class="flex items-center gap-2">
+												<div class="w-4 h-4 rounded" style="background-color: {
+													dist.zone === 1 ? '#e5e7eb' :
+													dist.zone === 2 ? '#bfdbfe' :
+													dist.zone === 3 ? '#86efac' :
+													dist.zone === 4 ? '#fed7aa' :
+													'#fecaca'
+												}"></div>
+												<span class="text-sm font-medium">{dist.name}</span>
+											</div>
+											<div class="text-sm text-muted-foreground">
+												{Math.round(dist.timeInMinutes)}m ({dist.percentage}%)
+											</div>
+										</div>
+									{/each}
+								</div>
+							</div>
+						</div>
+					{/if}
+
 					<!-- Heart Rate Zones -->
-					<div class="mt-6">
-						<h4 class="font-semibold mb-3">Heart Rate Zones (Estimated Max: {maxHR} bpm)</h4>
+					<div class="border-t pt-6">
+						<h4 class="font-semibold mb-3">Heart Rate Zones (Your Max: {userMaxHR} bpm)</h4>
 						<div class="space-y-2">
 							{#each hrZones as zone}
 								<div class="flex items-center gap-3">

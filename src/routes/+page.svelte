@@ -38,6 +38,7 @@
 			<Button href="/upload">Upload Data</Button>
 			<Button href="/runs" variant="outline">View All Runs</Button>
 			<Button href="/stats" variant="outline">Statistics</Button>
+			<Button href="/settings" variant="outline">Settings</Button>
 		</div>
 	</div>
 
