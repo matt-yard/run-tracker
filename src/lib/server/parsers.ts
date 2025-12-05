@@ -184,6 +184,9 @@ export function parseAppleHealthXML(xmlContent: string): ParsedRun[] {
 				calories,
 				avgHeartRate,
 				maxHeartRate,
+				elevationGain: undefined,
+				notes: undefined,
+				gpxData: undefined,
 				stepCount,
 				avgRunningPower,
 				avgGroundContactTime,
@@ -282,8 +285,23 @@ export function parseGPX(gpxContent: string): ParsedRun[] {
 				distance: totalDistance,
 				duration: duration,
 				pace: calculatePace(totalDistance, duration),
+				avgHeartRate: undefined,
+				maxHeartRate: undefined,
 				elevationGain: elevationGain > 0 ? elevationGain : undefined,
+				calories: undefined,
+				notes: undefined,
 				gpxData: JSON.stringify(points),
+				stepCount: undefined,
+				avgRunningPower: undefined,
+				avgGroundContactTime: undefined,
+				avgRunningSpeed: undefined,
+				avgVerticalOscillation: undefined,
+				avgStrideLength: undefined,
+				workoutName: undefined,
+				indoorWorkout: undefined,
+				sourceName: undefined,
+				splits: undefined,
+				rawData: undefined,
 				source: 'gpx'
 			});
 		}
@@ -364,6 +382,19 @@ export function parseCSV(csvContent: string): ParsedRun[] {
 			maxHeartRate: maxHeartRate ? parseInt(maxHeartRate) : undefined,
 			elevationGain: elevationGain ? parseFloat(elevationGain) : undefined,
 			calories: calories ? parseInt(calories) : undefined,
+			notes: undefined,
+			gpxData: undefined,
+			stepCount: undefined,
+			avgRunningPower: undefined,
+			avgGroundContactTime: undefined,
+			avgRunningSpeed: undefined,
+			avgVerticalOscillation: undefined,
+			avgStrideLength: undefined,
+			workoutName: undefined,
+			indoorWorkout: undefined,
+			sourceName: undefined,
+			splits: undefined,
+			rawData: undefined,
 			source: 'csv'
 		});
 	}
@@ -540,6 +571,9 @@ export async function parseAppleHealthXMLFromFile(filePath: string): Promise<Par
 							calories,
 							avgHeartRate,
 							maxHeartRate,
+							elevationGain: undefined,
+							notes: undefined,
+							gpxData: undefined,
 							stepCount,
 							avgRunningPower,
 							avgGroundContactTime,
@@ -550,6 +584,7 @@ export async function parseAppleHealthXMLFromFile(filePath: string): Promise<Par
 							indoorWorkout,
 							sourceName: sourceNameMatch ? sourceNameMatch[1] : undefined,
 							splits: splits.length > 0 ? JSON.stringify(splits) : undefined,
+							rawData: undefined,
 							source: 'apple_health'
 						});
 					}
