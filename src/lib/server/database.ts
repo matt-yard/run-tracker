@@ -21,6 +21,18 @@ export interface Run {
 	gpxData?: string; // JSON string of GPS coordinates
 	source: string; // 'apple_health', 'gpx', 'csv', 'manual'
 	createdAt: string;
+	// Apple Health rich metrics
+	stepCount?: number;
+	avgRunningPower?: number; // watts
+	avgGroundContactTime?: number; // milliseconds
+	avgRunningSpeed?: number; // km/hr
+	avgVerticalOscillation?: number; // cm
+	avgStrideLength?: number; // meters
+	workoutName?: string;
+	indoorWorkout?: number; // 0 or 1 (boolean)
+	sourceName?: string;
+	splits?: string; // JSON array of lap data
+	rawData?: string; // JSON object with all extracted metrics
 }
 
 // Initialize the database schema
@@ -40,12 +52,49 @@ export function initializeDatabase() {
 			gpxData TEXT,
 			source TEXT NOT NULL,
 			createdAt TEXT NOT NULL,
+			stepCount INTEGER,
+			avgRunningPower REAL,
+			avgGroundContactTime REAL,
+			avgRunningSpeed REAL,
+			avgVerticalOscillation REAL,
+			avgStrideLength REAL,
+			workoutName TEXT,
+			indoorWorkout INTEGER,
+			sourceName TEXT,
+			splits TEXT,
+			rawData TEXT,
 			UNIQUE(date, distance, duration)
 		);
 
 		CREATE INDEX IF NOT EXISTS idx_runs_date ON runs(date);
 		CREATE INDEX IF NOT EXISTS idx_runs_source ON runs(source);
 	`);
+
+	// Migrate existing databases by adding new columns if they don't exist
+	const columns = [
+		'stepCount INTEGER',
+		'avgRunningPower REAL',
+		'avgGroundContactTime REAL',
+		'avgRunningSpeed REAL',
+		'avgVerticalOscillation REAL',
+		'avgStrideLength REAL',
+		'workoutName TEXT',
+		'indoorWorkout INTEGER',
+		'sourceName TEXT',
+		'splits TEXT',
+		'rawData TEXT'
+	];
+
+	for (const column of columns) {
+		const columnName = column.split(' ')[0];
+		try {
+			// Check if column exists by trying to select it
+			db.prepare(`SELECT ${columnName} FROM runs LIMIT 1`).get();
+		} catch (err) {
+			// Column doesn't exist, add it
+			db.exec(`ALTER TABLE runs ADD COLUMN ${column}`);
+		}
+	}
 }
 
 // Get all runs
@@ -71,10 +120,16 @@ export function insertRun(run: Omit<Run, 'id' | 'createdAt'>): number {
 	const stmt = db.prepare(`
 		INSERT INTO runs (
 			date, distance, duration, pace, avgHeartRate, maxHeartRate,
-			elevationGain, calories, notes, gpxData, source, createdAt
+			elevationGain, calories, notes, gpxData, source, createdAt,
+			stepCount, avgRunningPower, avgGroundContactTime, avgRunningSpeed,
+			avgVerticalOscillation, avgStrideLength, workoutName, indoorWorkout,
+			sourceName, splits, rawData
 		) VALUES (
 			@date, @distance, @duration, @pace, @avgHeartRate, @maxHeartRate,
-			@elevationGain, @calories, @notes, @gpxData, @source, @createdAt
+			@elevationGain, @calories, @notes, @gpxData, @source, @createdAt,
+			@stepCount, @avgRunningPower, @avgGroundContactTime, @avgRunningSpeed,
+			@avgVerticalOscillation, @avgStrideLength, @workoutName, @indoorWorkout,
+			@sourceName, @splits, @rawData
 		)
 	`);
 

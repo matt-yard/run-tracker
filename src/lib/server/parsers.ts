@@ -16,6 +16,18 @@ export interface ParsedRun {
 	notes?: string;
 	gpxData?: string;
 	source: string;
+	// Apple Health rich metrics
+	stepCount?: number;
+	avgRunningPower?: number;
+	avgGroundContactTime?: number;
+	avgRunningSpeed?: number;
+	avgVerticalOscillation?: number;
+	avgStrideLength?: number;
+	workoutName?: string;
+	indoorWorkout?: number;
+	sourceName?: string;
+	splits?: string;
+	rawData?: string;
 }
 
 function calculatePace(distance: number, duration: number): number {
@@ -27,7 +39,11 @@ function calculatePace(distance: number, duration: number): number {
 export function parseAppleHealthXML(xmlContent: string): ParsedRun[] {
 	const parser = new XMLParser({
 		ignoreAttributes: false,
-		attributeNamePrefix: ''
+		attributeNamePrefix: '',
+		isArray: (tagName) => {
+			// Ensure these tags are always arrays even if there's only one
+			return ['Workout', 'WorkoutStatistics', 'WorkoutEvent', 'MetadataEntry', 'WorkoutActivity'].includes(tagName);
+		}
 	});
 
 	const result = parser.parse(xmlContent);
@@ -50,7 +66,7 @@ export function parseAppleHealthXML(xmlContent: string): ParsedRun[] {
 			continue;
 		}
 
-		const distance = parseFloat(workout.totalDistance || '0');
+		// Extract basic workout attributes
 		const durationValue = parseFloat(workout.duration || '0');
 		const durationUnit = workout.durationUnit || 'min';
 
@@ -60,12 +76,104 @@ export function parseAppleHealthXML(xmlContent: string): ParsedRun[] {
 			duration = durationValue * 60;
 		}
 
-		// Convert distance to km if needed
-		let distanceKm = distance;
-		const distanceUnit = workout.totalDistanceUnit || 'km';
-		if (distanceUnit === 'mi') {
-			distanceKm = distance * 1.60934;
+		// Extract WorkoutStatistics
+		let distanceKm = 0;
+		let calories: number | undefined;
+		let avgHeartRate: number | undefined;
+		let maxHeartRate: number | undefined;
+		let stepCount: number | undefined;
+		let avgRunningPower: number | undefined;
+		let avgGroundContactTime: number | undefined;
+		let avgRunningSpeed: number | undefined;
+		let avgVerticalOscillation: number | undefined;
+		let avgStrideLength: number | undefined;
+
+		const workoutStats = Array.isArray(workout.WorkoutStatistics)
+			? workout.WorkoutStatistics
+			: workout.WorkoutStatistics
+			? [workout.WorkoutStatistics]
+			: [];
+
+		for (const stat of workoutStats) {
+			const type = stat.type;
+
+			if (type === 'HKQuantityTypeIdentifierDistanceWalkingRunning') {
+				const distance = parseFloat(stat.sum || '0');
+				const unit = stat.unit || 'km';
+				// Convert to km
+				distanceKm = unit === 'mi' ? distance * 1.60934 : distance;
+			} else if (type === 'HKQuantityTypeIdentifierActiveEnergyBurned') {
+				calories = stat.sum ? parseInt(stat.sum) : undefined;
+			} else if (type === 'HKQuantityTypeIdentifierHeartRate') {
+				avgHeartRate = stat.average ? Math.round(parseFloat(stat.average)) : undefined;
+				maxHeartRate = stat.maximum ? Math.round(parseFloat(stat.maximum)) : undefined;
+			} else if (type === 'HKQuantityTypeIdentifierStepCount') {
+				stepCount = stat.sum ? Math.round(parseFloat(stat.sum)) : undefined;
+			} else if (type === 'HKQuantityTypeIdentifierRunningPower') {
+				avgRunningPower = stat.average ? parseFloat(stat.average) : undefined;
+			} else if (type === 'HKQuantityTypeIdentifierRunningGroundContactTime') {
+				avgGroundContactTime = stat.average ? parseFloat(stat.average) : undefined;
+			} else if (type === 'HKQuantityTypeIdentifierRunningSpeed') {
+				const speed = stat.average ? parseFloat(stat.average) : undefined;
+				const unit = stat.unit || 'km/hr';
+				// Convert to km/hr
+				avgRunningSpeed = unit === 'mi/hr' && speed ? speed * 1.60934 : speed;
+			} else if (type === 'HKQuantityTypeIdentifierRunningVerticalOscillation') {
+				avgVerticalOscillation = stat.average ? parseFloat(stat.average) : undefined;
+			} else if (type === 'HKQuantityTypeIdentifierRunningStrideLength') {
+				avgStrideLength = stat.average ? parseFloat(stat.average) : undefined;
+			}
 		}
+
+		// Extract MetadataEntry values
+		let workoutName: string | undefined;
+		let indoorWorkout: number | undefined;
+
+		const metadataEntries = Array.isArray(workout.MetadataEntry)
+			? workout.MetadataEntry
+			: workout.MetadataEntry
+			? [workout.MetadataEntry]
+			: [];
+
+		for (const entry of metadataEntries) {
+			if (entry.key === 'HKWorkoutBrandName') {
+				workoutName = entry.value;
+			} else if (entry.key === 'HKIndoorWorkout') {
+				indoorWorkout = parseInt(entry.value);
+			}
+		}
+
+		// Extract splits from WorkoutEvents
+		const workoutEvents = Array.isArray(workout.WorkoutEvent)
+			? workout.WorkoutEvent
+			: workout.WorkoutEvent
+			? [workout.WorkoutEvent]
+			: [];
+
+		const splits: any[] = [];
+		for (const event of workoutEvents) {
+			if (event.type === 'HKWorkoutEventTypeLap' && event.duration) {
+				splits.push({
+					duration: parseFloat(event.duration),
+					durationUnit: event.durationUnit || 'min',
+					date: event.date
+				});
+			}
+		}
+
+		// Create raw data object with all extracted metrics
+		const rawData = {
+			workoutActivityType: workout.workoutActivityType,
+			sourceName: workout.sourceName,
+			sourceVersion: workout.sourceVersion,
+			device: workout.device,
+			creationDate: workout.creationDate,
+			startDate: workout.startDate,
+			endDate: workout.endDate,
+			workoutStats,
+			metadata: metadataEntries,
+			events: workoutEvents
+		};
 
 		if (distanceKm > 0 && duration > 0) {
 			runs.push({
@@ -73,7 +181,23 @@ export function parseAppleHealthXML(xmlContent: string): ParsedRun[] {
 				distance: distanceKm,
 				duration: duration,
 				pace: calculatePace(distanceKm, duration),
-				calories: workout.totalEnergyBurned ? parseInt(workout.totalEnergyBurned) : undefined,
+				calories,
+				avgHeartRate,
+				maxHeartRate,
+				elevationGain: undefined,
+				notes: undefined,
+				gpxData: undefined,
+				stepCount,
+				avgRunningPower,
+				avgGroundContactTime,
+				avgRunningSpeed,
+				avgVerticalOscillation,
+				avgStrideLength,
+				workoutName,
+				indoorWorkout,
+				sourceName: workout.sourceName,
+				splits: splits.length > 0 ? JSON.stringify(splits) : undefined,
+				rawData: JSON.stringify(rawData),
 				source: 'apple_health'
 			});
 		}
@@ -161,8 +285,23 @@ export function parseGPX(gpxContent: string): ParsedRun[] {
 				distance: totalDistance,
 				duration: duration,
 				pace: calculatePace(totalDistance, duration),
+				avgHeartRate: undefined,
+				maxHeartRate: undefined,
 				elevationGain: elevationGain > 0 ? elevationGain : undefined,
+				calories: undefined,
+				notes: undefined,
 				gpxData: JSON.stringify(points),
+				stepCount: undefined,
+				avgRunningPower: undefined,
+				avgGroundContactTime: undefined,
+				avgRunningSpeed: undefined,
+				avgVerticalOscillation: undefined,
+				avgStrideLength: undefined,
+				workoutName: undefined,
+				indoorWorkout: undefined,
+				sourceName: undefined,
+				splits: undefined,
+				rawData: undefined,
 				source: 'gpx'
 			});
 		}
@@ -243,6 +382,19 @@ export function parseCSV(csvContent: string): ParsedRun[] {
 			maxHeartRate: maxHeartRate ? parseInt(maxHeartRate) : undefined,
 			elevationGain: elevationGain ? parseFloat(elevationGain) : undefined,
 			calories: calories ? parseInt(calories) : undefined,
+			notes: undefined,
+			gpxData: undefined,
+			stepCount: undefined,
+			avgRunningPower: undefined,
+			avgGroundContactTime: undefined,
+			avgRunningSpeed: undefined,
+			avgVerticalOscillation: undefined,
+			avgStrideLength: undefined,
+			workoutName: undefined,
+			indoorWorkout: undefined,
+			sourceName: undefined,
+			splits: undefined,
+			rawData: undefined,
 			source: 'csv'
 		});
 	}
@@ -255,7 +407,7 @@ export async function parseAppleHealthXMLFromFile(filePath: string): Promise<Par
 	const runs: ParsedRun[] = [];
 
 	// For large XML files, we need to use a streaming approach
-	// We'll use a simple regex-based extraction since full XML parsing requires loading entire file
+	// We'll use a regex-based extraction since full XML parsing requires loading entire file
 	const fileStream = createReadStream(filePath, { encoding: 'utf8' });
 	const rl = createInterface({
 		input: fileStream,
@@ -266,57 +418,175 @@ export async function parseAppleHealthXMLFromFile(filePath: string): Promise<Par
 	let inWorkout = false;
 
 	for await (const line of rl) {
-		// Check if we're entering a Workout tag
-		if (line.includes('<Workout')) {
+		// Check if we're entering a Workout tag (not WorkoutEvent or WorkoutStatistics)
+		if (line.includes('<Workout ') || line.includes('<Workout>')) {
 			inWorkout = true;
 			workoutBuffer = line;
 		} else if (inWorkout) {
-			workoutBuffer += line;
+			workoutBuffer += '\n' + line;
 
 			// Check if we've reached the end of the workout tag
-			if (line.includes('/>') || line.includes('</Workout>')) {
+			if (line.includes('</Workout>')) {
 				inWorkout = false;
 
 				// Parse this workout
 				try {
-					// Extract attributes using regex
-					if (workoutBuffer.includes('Running')) {
-						const distanceMatch = workoutBuffer.match(/totalDistance="([^"]+)"/);
-						const durationMatch = workoutBuffer.match(/duration="([^"]+)"/);
-						const durationUnitMatch = workoutBuffer.match(/durationUnit="([^"]+)"/);
-						const distanceUnitMatch = workoutBuffer.match(/totalDistanceUnit="([^"]+)"/);
-						const startDateMatch = workoutBuffer.match(/startDate="([^"]+)"/);
-						const caloriesMatch = workoutBuffer.match(/totalEnergyBurned="([^"]+)"/);
+					// First check if this is a running workout
+					const activityTypeMatch = workoutBuffer.match(/workoutActivityType="([^"]+)"/);
+					if (!activityTypeMatch || !activityTypeMatch[1].includes('Running')) {
+						workoutBuffer = '';
+						continue;
+					}
 
-						if (distanceMatch && durationMatch) {
-							const distance = parseFloat(distanceMatch[1]);
-							let durationValue = parseFloat(durationMatch[1]);
-							const durationUnit = durationUnitMatch ? durationUnitMatch[1] : 'min';
+					// Extract basic attributes from opening Workout tag
+					const durationMatch = workoutBuffer.match(/duration="([^"]+)"/);
+					const durationUnitMatch = workoutBuffer.match(/durationUnit="([^"]+)"/);
+					const startDateMatch = workoutBuffer.match(/startDate="([^"]+)"/);
+					const sourceNameMatch = workoutBuffer.match(/sourceName="([^"]+)"/);
 
-							// Convert duration to minutes
-							let duration = durationValue;
-							if (durationUnit === 'hr') {
-								duration = durationValue * 60;
+					if (!durationMatch) {
+						workoutBuffer = '';
+						continue;
+					}
+
+					let durationValue = parseFloat(durationMatch[1]);
+					const durationUnit = durationUnitMatch ? durationUnitMatch[1] : 'min';
+
+					// Convert duration to minutes
+					let duration = durationValue;
+					if (durationUnit === 'hr') {
+						duration = durationValue * 60;
+					}
+
+					// Extract WorkoutStatistics using regex
+					let distanceKm = 0;
+					let calories: number | undefined;
+					let avgHeartRate: number | undefined;
+					let maxHeartRate: number | undefined;
+					let stepCount: number | undefined;
+					let avgRunningPower: number | undefined;
+					let avgGroundContactTime: number | undefined;
+					let avgRunningSpeed: number | undefined;
+					let avgVerticalOscillation: number | undefined;
+					let avgStrideLength: number | undefined;
+
+					// Find all WorkoutStatistics elements
+					const statsRegex = /<WorkoutStatistics[^>]+>/g;
+					const statsMatches = workoutBuffer.match(statsRegex) || [];
+
+					for (const statTag of statsMatches) {
+						const typeMatch = statTag.match(/type="([^"]+)"/);
+						if (!typeMatch) continue;
+
+						const type = typeMatch[1];
+
+						if (type === 'HKQuantityTypeIdentifierDistanceWalkingRunning') {
+							const sumMatch = statTag.match(/sum="([^"]+)"/);
+							const unitMatch = statTag.match(/unit="([^"]+)"/);
+							if (sumMatch) {
+								const distance = parseFloat(sumMatch[1]);
+								const unit = unitMatch ? unitMatch[1] : 'km';
+								distanceKm = unit === 'mi' ? distance * 1.60934 : distance;
 							}
-
-							// Convert distance to km if needed
-							let distanceKm = distance;
-							const distanceUnit = distanceUnitMatch ? distanceUnitMatch[1] : 'km';
-							if (distanceUnit === 'mi') {
-								distanceKm = distance * 1.60934;
+						} else if (type === 'HKQuantityTypeIdentifierActiveEnergyBurned') {
+							const sumMatch = statTag.match(/sum="([^"]+)"/);
+							if (sumMatch) calories = parseInt(sumMatch[1]);
+						} else if (type === 'HKQuantityTypeIdentifierHeartRate') {
+							const avgMatch = statTag.match(/average="([^"]+)"/);
+							const maxMatch = statTag.match(/maximum="([^"]+)"/);
+							if (avgMatch) avgHeartRate = Math.round(parseFloat(avgMatch[1]));
+							if (maxMatch) maxHeartRate = Math.round(parseFloat(maxMatch[1]));
+						} else if (type === 'HKQuantityTypeIdentifierStepCount') {
+							const sumMatch = statTag.match(/sum="([^"]+)"/);
+							if (sumMatch) stepCount = Math.round(parseFloat(sumMatch[1]));
+						} else if (type === 'HKQuantityTypeIdentifierRunningPower') {
+							const avgMatch = statTag.match(/average="([^"]+)"/);
+							if (avgMatch) avgRunningPower = parseFloat(avgMatch[1]);
+						} else if (type === 'HKQuantityTypeIdentifierRunningGroundContactTime') {
+							const avgMatch = statTag.match(/average="([^"]+)"/);
+							if (avgMatch) avgGroundContactTime = parseFloat(avgMatch[1]);
+						} else if (type === 'HKQuantityTypeIdentifierRunningSpeed') {
+							const avgMatch = statTag.match(/average="([^"]+)"/);
+							const unitMatch = statTag.match(/unit="([^"]+)"/);
+							if (avgMatch) {
+								const speed = parseFloat(avgMatch[1]);
+								const unit = unitMatch ? unitMatch[1] : 'km/hr';
+								avgRunningSpeed = unit === 'mi/hr' ? speed * 1.60934 : speed;
 							}
+						} else if (type === 'HKQuantityTypeIdentifierRunningVerticalOscillation') {
+							const avgMatch = statTag.match(/average="([^"]+)"/);
+							if (avgMatch) avgVerticalOscillation = parseFloat(avgMatch[1]);
+						} else if (type === 'HKQuantityTypeIdentifierRunningStrideLength') {
+							const avgMatch = statTag.match(/average="([^"]+)"/);
+							if (avgMatch) avgStrideLength = parseFloat(avgMatch[1]);
+						}
+					}
 
-							if (distanceKm > 0 && duration > 0) {
-								runs.push({
-									date: startDateMatch ? new Date(startDateMatch[1]).toISOString() : new Date().toISOString(),
-									distance: distanceKm,
-									duration: duration,
-									pace: calculatePace(distanceKm, duration),
-									calories: caloriesMatch ? parseInt(caloriesMatch[1]) : undefined,
-									source: 'apple_health'
+					// Extract MetadataEntry values
+					let workoutName: string | undefined;
+					let indoorWorkout: number | undefined;
+
+					const metadataRegex = /<MetadataEntry[^>]+>/g;
+					const metadataMatches = workoutBuffer.match(metadataRegex) || [];
+
+					for (const metaTag of metadataMatches) {
+						const keyMatch = metaTag.match(/key="([^"]+)"/);
+						const valueMatch = metaTag.match(/value="([^"]+)"/);
+						if (!keyMatch || !valueMatch) continue;
+
+						if (keyMatch[1] === 'HKWorkoutBrandName') {
+							workoutName = valueMatch[1];
+						} else if (keyMatch[1] === 'HKIndoorWorkout') {
+							indoorWorkout = parseInt(valueMatch[1]);
+						}
+					}
+
+					// Extract splits from WorkoutEvents
+					const splits: any[] = [];
+					const eventRegex = /<WorkoutEvent[^>]+>/g;
+					const eventMatches = workoutBuffer.match(eventRegex) || [];
+
+					for (const eventTag of eventMatches) {
+						const typeMatch = eventTag.match(/type="([^"]+)"/);
+						if (typeMatch && typeMatch[1] === 'HKWorkoutEventTypeLap') {
+							const durationMatch = eventTag.match(/duration="([^"]+)"/);
+							const dateMatch = eventTag.match(/date="([^"]+)"/);
+							const durationUnitMatch = eventTag.match(/durationUnit="([^"]+)"/);
+							if (durationMatch) {
+								splits.push({
+									duration: parseFloat(durationMatch[1]),
+									durationUnit: durationUnitMatch ? durationUnitMatch[1] : 'min',
+									date: dateMatch ? dateMatch[1] : undefined
 								});
 							}
 						}
+					}
+
+					if (distanceKm > 0 && duration > 0) {
+						runs.push({
+							date: startDateMatch ? new Date(startDateMatch[1]).toISOString() : new Date().toISOString(),
+							distance: distanceKm,
+							duration: duration,
+							pace: calculatePace(distanceKm, duration),
+							calories,
+							avgHeartRate,
+							maxHeartRate,
+							elevationGain: undefined,
+							notes: undefined,
+							gpxData: undefined,
+							stepCount,
+							avgRunningPower,
+							avgGroundContactTime,
+							avgRunningSpeed,
+							avgVerticalOscillation,
+							avgStrideLength,
+							workoutName,
+							indoorWorkout,
+							sourceName: sourceNameMatch ? sourceNameMatch[1] : undefined,
+							splits: splits.length > 0 ? JSON.stringify(splits) : undefined,
+							rawData: undefined,
+							source: 'apple_health'
+						});
 					}
 				} catch (err) {
 					// Skip invalid workouts
