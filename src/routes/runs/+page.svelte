@@ -180,7 +180,7 @@
 					</TableHeader>
 					<TableBody>
 						{#each filteredRuns() as run}
-							<TableRow>
+							<TableRow class="cursor-pointer hover:bg-accent" onclick={() => window.location.href = `/runs/${run.id}`}>
 								<TableCell class="font-medium">
 									{format(new Date(run.date), 'MMM d, yyyy')}
 									<div class="text-xs text-muted-foreground">
@@ -217,7 +217,7 @@
 								<TableCell>
 									<Badge variant="outline">{run.source}</Badge>
 								</TableCell>
-								<TableCell>
+								<TableCell onclick={(e) => e.stopPropagation()}>
 									{#if deleteConfirmId === run.id}
 										<div class="flex gap-2">
 											<form method="POST" action="?/delete" use:enhance>

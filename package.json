@@ -40,6 +40,7 @@
 		"fast-xml-parser": "^5.3.2",
 		"fs-extra": "^11.3.2",
 		"layerchart": "^1.0.12",
+		"lucide-svelte": "^0.556.0",
 		"papaparse": "^5.5.3",
 		"svelte-ux": "^1.0.9",
 		"tailwind-variants": "^3.2.2"
