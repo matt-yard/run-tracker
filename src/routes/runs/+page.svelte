@@ -11,6 +11,7 @@
 		TableHeader,
 		TableRow
 	} from '$lib/components/ui/table';
+	import DarkModeToggle from '$lib/components/DarkModeToggle.svelte';
 	import { format } from 'date-fns';
 	import type { PageData, ActionData } from './$types';
 	import { enhance } from '$app/forms';
@@ -102,7 +103,8 @@
 <div class="container mx-auto py-8">
 	<div class="flex justify-between items-center mb-8">
 		<h1 class="text-4xl font-bold">All Runs</h1>
-		<div class="space-x-2">
+		<div class="flex items-center space-x-2">
+			<DarkModeToggle />
 			<form method="POST" action="?/export" use:enhance>
 				<Button type="submit" variant="outline">Export to CSV</Button>
 			</form>

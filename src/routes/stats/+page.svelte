@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { Card, CardContent, CardHeader, CardTitle } from '$lib/components/ui/card';
 	import { Button } from '$lib/components/ui/button';
+	import DarkModeToggle from '$lib/components/DarkModeToggle.svelte';
 	import { Chart, Svg } from 'layerchart';
 	import { scaleBand, scaleLinear, scaleTime } from 'd3-scale';
 	import { Area, Axis, Bars, Labels, Tooltip } from 'layerchart';
@@ -48,7 +49,10 @@
 <div class="container mx-auto py-8">
 	<div class="flex justify-between items-center mb-8">
 		<h1 class="text-4xl font-bold">Statistics & Trends</h1>
-		<Button href="/">Back to Dashboard</Button>
+		<div class="flex items-center space-x-2">
+			<DarkModeToggle />
+			<Button href="/">Back to Dashboard</Button>
+		</div>
 	</div>
 
 	<div class="grid grid-cols-1 gap-6">

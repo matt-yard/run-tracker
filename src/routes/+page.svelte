@@ -10,6 +10,7 @@
 		TableHeader,
 		TableRow
 	} from '$lib/components/ui/table';
+	import DarkModeToggle from '$lib/components/DarkModeToggle.svelte';
 	import { format } from 'date-fns';
 	import type { PageData } from './$types';
 
@@ -34,7 +35,8 @@
 <div class="container mx-auto py-8">
 	<div class="flex justify-between items-center mb-8">
 		<h1 class="text-4xl font-bold">Running Tracker</h1>
-		<div class="space-x-2">
+		<div class="flex items-center space-x-2">
+			<DarkModeToggle />
 			<Button href="/upload">Upload Data</Button>
 			<Button href="/runs" variant="outline">View All Runs</Button>
 			<Button href="/stats" variant="outline">Statistics</Button>

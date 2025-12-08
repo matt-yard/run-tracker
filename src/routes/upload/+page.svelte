@@ -2,6 +2,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Card, CardContent, CardHeader, CardTitle } from '$lib/components/ui/card';
 	import { Input } from '$lib/components/ui/input';
+	import DarkModeToggle from '$lib/components/DarkModeToggle.svelte';
 	import type { ActionData } from './$types';
 
 	let { form }: { form: ActionData } = $props();
@@ -22,7 +23,13 @@
 </script>
 
 <div class="container mx-auto py-8 max-w-4xl">
-	<h1 class="text-4xl font-bold mb-8">Upload Run Data</h1>
+	<div class="flex justify-between items-center mb-8">
+		<h1 class="text-4xl font-bold">Upload Run Data</h1>
+		<div class="flex items-center space-x-2">
+			<DarkModeToggle />
+			<Button href="/">Back to Dashboard</Button>
+		</div>
+	</div>
 
 	<Card>
 		<CardHeader>
