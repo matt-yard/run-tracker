@@ -22,10 +22,8 @@ function createDarkModeStore() {
 			// Check system preference
 			darkMode = window.matchMedia('(prefers-color-scheme: dark)').matches;
 		}
-		// Apply initial state using $state value
-		$effect(() => {
-			updateDOMClass(darkMode);
-		});
+		// Apply initial state
+		updateDOMClass(darkMode);
 	}
 
 	return {
