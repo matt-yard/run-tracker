@@ -2,14 +2,8 @@
 	import { Switch } from '$lib/components/ui/switch';
 	import { unitPreference } from '$lib/stores/unitPreference.svelte';
 
-	// Bind checked state to derived imperial preference
-	let isImperial = $derived.by(() => unitPreference.unit === 'imperial');
-
-	// Update store when switch changes
-	$effect(() => {
-		// This effect runs when we manually set isImperialState
-		// The actual toggling is done via onclick
-	});
+	// Derive checked state from unit preference
+	let isImperial = $derived(unitPreference.unit === 'imperial');
 </script>
 
 <div class="flex items-center gap-3">
