@@ -11,6 +11,7 @@
 		TableHeader,
 		TableRow
 	} from '$lib/components/ui/table';
+	import DarkModeToggle from '$lib/components/DarkModeToggle.svelte';
 	import UnitToggle from '$lib/components/UnitToggle.svelte';
 	import { unitPreference } from '$lib/stores/unitPreference.svelte';
 	import { formatDistance, formatPace, formatDuration } from '$lib/utils/unitConversion';
@@ -95,6 +96,7 @@
 		<h1 class="text-4xl font-bold">All Runs</h1>
 		<div class="flex items-center gap-4">
 			<UnitToggle />
+			<DarkModeToggle />
 			<div class="space-x-2">
 				<form method="POST" action="?/export" use:enhance>
 					<Button type="submit" variant="outline">Export to CSV</Button>

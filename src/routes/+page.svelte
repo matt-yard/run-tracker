@@ -10,6 +10,7 @@
 		TableHeader,
 		TableRow
 	} from '$lib/components/ui/table';
+	import DarkModeToggle from '$lib/components/DarkModeToggle.svelte';
 	import UnitToggle from '$lib/components/UnitToggle.svelte';
 	import { unitPreference } from '$lib/stores/unitPreference.svelte';
 	import { formatDistance, formatPace, formatDuration } from '$lib/utils/unitConversion';
@@ -28,6 +29,7 @@
 		<div class="flex items-center gap-4">
 			<UnitToggle />
 			<div class="space-x-2">
+				<DarkModeToggle />
 				<Button href="/upload">Upload Data</Button>
 				<Button href="/runs" variant="outline">View All Runs</Button>
 				<Button href="/stats" variant="outline">Statistics</Button>
