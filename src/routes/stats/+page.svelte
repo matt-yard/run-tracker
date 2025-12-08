@@ -4,9 +4,15 @@
 	import { Chart, Svg } from 'layerchart';
 	import { scaleBand, scaleLinear, scaleTime } from 'd3-scale';
 	import { Area, Axis, Bars, Labels, Tooltip } from 'layerchart';
+	import UnitToggle from '$lib/components/UnitToggle.svelte';
+	import { unitPreference } from '$lib/stores/unitPreference.svelte';
+	import { formatDistance, formatPace } from '$lib/utils/unitConversion';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
+
+	// Reactive unit from store
+	let currentUnit = $derived(unitPreference.unit);
 
 	// Prepare weekly distance data
 	let weeklyChartData = $derived(() => {
@@ -30,25 +36,43 @@
 			}));
 	});
 
-	// Prepare distance distribution data
+	// Prepare distance distribution data with converted labels
 	let distanceDistribution = $derived(() => {
-		return Object.entries(data.distanceRanges).map(([range, count]) => ({
-			range,
-			count
-		}));
+		return Object.entries(data.distanceRanges).map(([range, count]) => {
+			// Convert range labels (e.g., "0-5km" to "0-3.1mi" when imperial)
+			let displayRange = range;
+			if (currentUnit === 'imperial') {
+				displayRange = convertRangeLabel(range);
+			}
+			return {
+				range: displayRange,
+				count
+			};
+		});
 	});
 
-	function formatPace(pace: number): string {
-		const mins = Math.floor(pace);
-		const secs = Math.round((pace - mins) * 60);
-		return `${mins}:${secs.toString().padStart(2, '0')}`;
+	function convertRangeLabel(kmRange: string): string {
+		// Convert km range labels to miles (e.g., "5-10km" -> "3.1-6.2mi")
+		if (kmRange.includes('+')) {
+			const km = parseFloat(kmRange.replace('km+', ''));
+			const miles = (km * 0.621371).toFixed(1);
+			return `${miles}mi+`;
+		} else {
+			const parts = kmRange.replace('km', '').split('-');
+			const start = (parseFloat(parts[0]) * 0.621371).toFixed(1);
+			const end = (parseFloat(parts[1]) * 0.621371).toFixed(1);
+			return `${start}-${end}mi`;
+		}
 	}
 </script>
 
 <div class="container mx-auto py-8">
 	<div class="flex justify-between items-center mb-8">
 		<h1 class="text-4xl font-bold">Statistics & Trends</h1>
-		<Button href="/">Back to Dashboard</Button>
+		<div class="flex items-center gap-4">
+			<UnitToggle />
+			<Button href="/">Back to Dashboard</Button>
+		</div>
 	</div>
 
 	<div class="grid grid-cols-1 gap-6">
@@ -75,7 +99,7 @@
 							<Tooltip header={(d) => `Week ${d.week.split('-W')[1]}`} let:data>
 								<div class="space-y-1">
 									<div class="text-sm">
-										Distance: <span class="font-semibold">{data.distance.toFixed(1)} km</span>
+										Distance: <span class="font-semibold">{formatDistance(data.distance, currentUnit, 1)}</span>
 									</div>
 									<div class="text-sm">
 										Runs: <span class="font-semibold">{data.count}</span>
@@ -123,10 +147,10 @@
 							}} let:data>
 								<div class="space-y-1">
 									<div class="text-sm">
-										Distance: <span class="font-semibold">{data.distance.toFixed(1)} km</span>
+										Distance: <span class="font-semibold">{formatDistance(data.distance, currentUnit, 1)}</span>
 									</div>
 									<div class="text-sm">
-										Avg Pace: <span class="font-semibold">{formatPace(data.pace)}/km</span>
+										Avg Pace: <span class="font-semibold">{formatPace(data.pace, currentUnit)}</span>
 									</div>
 								</div>
 							</Tooltip>

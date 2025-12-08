@@ -11,6 +11,9 @@
 		TableHeader,
 		TableRow
 	} from '$lib/components/ui/table';
+	import UnitToggle from '$lib/components/UnitToggle.svelte';
+	import { unitPreference } from '$lib/stores/unitPreference.svelte';
+	import { formatDistance, formatPace, formatDuration } from '$lib/utils/unitConversion';
 	import { format } from 'date-fns';
 	import type { PageData, ActionData } from './$types';
 	import { enhance } from '$app/forms';
@@ -21,6 +24,9 @@
 	let sortBy = $state<'date' | 'distance' | 'pace'>('date');
 	let sortDirection = $state<'asc' | 'desc'>('desc');
 	let deleteConfirmId = $state<number | null>(null);
+
+	// Reactive unit from store
+	let currentUnit = $derived(unitPreference.unit);
 
 	let filteredRuns = $derived(() => {
 		let runs = [...data.runs];
@@ -53,21 +59,6 @@
 
 		return runs;
 	});
-
-	function formatPace(pace: number): string {
-		const mins = Math.floor(pace);
-		const secs = Math.round((pace - mins) * 60);
-		return `${mins}:${secs.toString().padStart(2, '0')} /km`;
-	}
-
-	function formatDuration(minutes: number): string {
-		const hrs = Math.floor(minutes / 60);
-		const mins = Math.round(minutes % 60);
-		if (hrs > 0) {
-			return `${hrs}h ${mins}m`;
-		}
-		return `${mins}m`;
-	}
 
 	function toggleSort(column: 'date' | 'distance' | 'pace') {
 		if (sortBy === column) {
@@ -102,11 +93,14 @@
 <div class="container mx-auto py-8">
 	<div class="flex justify-between items-center mb-8">
 		<h1 class="text-4xl font-bold">All Runs</h1>
-		<div class="space-x-2">
-			<form method="POST" action="?/export" use:enhance>
-				<Button type="submit" variant="outline">Export to CSV</Button>
-			</form>
-			<Button href="/">Back to Dashboard</Button>
+		<div class="flex items-center gap-4">
+			<UnitToggle />
+			<div class="space-x-2">
+				<form method="POST" action="?/export" use:enhance>
+					<Button type="submit" variant="outline">Export to CSV</Button>
+				</form>
+				<Button href="/">Back to Dashboard</Button>
+			</div>
 		</div>
 	</div>
 
@@ -187,9 +181,9 @@
 										{format(new Date(run.date), 'h:mm a')}
 									</div>
 								</TableCell>
-								<TableCell>{run.distance.toFixed(2)} km</TableCell>
+								<TableCell>{formatDistance(run.distance, currentUnit, 2)}</TableCell>
 								<TableCell>{formatDuration(run.duration)}</TableCell>
-								<TableCell>{formatPace(run.pace)}</TableCell>
+								<TableCell>{formatPace(run.pace, currentUnit)}</TableCell>
 								<TableCell>
 									{#if run.avgHeartRate}
 										{run.avgHeartRate} bpm
