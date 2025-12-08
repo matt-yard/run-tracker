@@ -31,6 +31,7 @@
 				<Button href="/upload">Upload Data</Button>
 				<Button href="/runs" variant="outline">View All Runs</Button>
 				<Button href="/stats" variant="outline">Statistics</Button>
+				<Button href="/settings" variant="outline">Settings</Button>
 			</div>
 		</div>
 	</div>
@@ -118,33 +119,33 @@
 		<CardContent>
 			<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
 				{#if data.personalRecords.fastestPace}
-					<div>
+					<a href="/runs/{data.personalRecords.fastestPace.id}" class="block p-4 rounded-lg border hover:bg-accent transition-colors">
 						<p class="text-sm font-medium text-muted-foreground mb-1">Fastest Pace</p>
 						<p class="text-2xl font-bold">{formatPace(data.personalRecords.fastestPace.pace, currentUnit)}</p>
 						<p class="text-sm text-muted-foreground mt-1">
 							{format(new Date(data.personalRecords.fastestPace.date), 'MMM d, yyyy')}
 						</p>
-					</div>
+					</a>
 				{/if}
 
 				{#if data.personalRecords.longestDistance}
-					<div>
+					<a href="/runs/{data.personalRecords.longestDistance.id}" class="block p-4 rounded-lg border hover:bg-accent transition-colors">
 						<p class="text-sm font-medium text-muted-foreground mb-1">Longest Distance</p>
 						<p class="text-2xl font-bold">{formatDistance(data.personalRecords.longestDistance.distance, currentUnit, 2)}</p>
 						<p class="text-sm text-muted-foreground mt-1">
 							{format(new Date(data.personalRecords.longestDistance.date), 'MMM d, yyyy')}
 						</p>
-					</div>
+					</a>
 				{/if}
 
 				{#if data.personalRecords.longestDuration}
-					<div>
+					<a href="/runs/{data.personalRecords.longestDuration.id}" class="block p-4 rounded-lg border hover:bg-accent transition-colors">
 						<p class="text-sm font-medium text-muted-foreground mb-1">Longest Duration</p>
 						<p class="text-2xl font-bold">{formatDuration(data.personalRecords.longestDuration.duration)}</p>
 						<p class="text-sm text-muted-foreground mt-1">
 							{format(new Date(data.personalRecords.longestDuration.date), 'MMM d, yyyy')}
 						</p>
-					</div>
+					</a>
 				{/if}
 			</div>
 		</CardContent>
@@ -174,7 +175,7 @@
 					</TableHeader>
 					<TableBody>
 						{#each data.recentRuns as run}
-							<TableRow>
+							<TableRow class="cursor-pointer hover:bg-accent" onclick={() => window.location.href = `/runs/${run.id}`}>
 								<TableCell>{format(new Date(run.date), 'MMM d, yyyy')}</TableCell>
 								<TableCell>{formatDistance(run.distance, currentUnit, 2)}</TableCell>
 								<TableCell>{formatDuration(run.duration)}</TableCell>
